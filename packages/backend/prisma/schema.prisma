@@ -1,0 +1,504 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum PostType {
+  TEXT
+  IMAGE
+  VIDEO
+  LINK
+  POLL
+}
+
+enum PostVisibility {
+  PUBLIC
+  FRIENDS_ONLY
+  PRIVATE
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
+enum FollowStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  SHARE
+  MENTION
+}
+
+enum ReactionType {
+  LIKE
+  LOVE
+  LAUGH
+  ANGRY
+  SAD
+  WOW
+}
+
+model User {
+  /// 사용자 고유 식별자
+  id            String    @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 사용자명 (유니크)
+  username      String    @unique @db.VarChar(30)
+  /// 이메일 주소 (유니크)
+  email         String    @unique @db.VarChar(255)
+  /// 암호화된 비밀번호
+  passwordHash  String    @db.VarChar(255)
+  /// 이름
+  firstName     String?   @db.VarChar(50)
+  /// 성
+  lastName      String?   @db.VarChar(50)
+  /// 표시될 이름
+  displayName   String?   @db.VarChar(100)
+  /// 프로필 이미지 URL
+  profileImage  String?   @db.VarChar(500)
+  /// 커버 이미지 URL
+  coverImage    String?   @db.VarChar(500)
+  /// 자기소개
+  bio           String?   @db.VarChar(500)
+  /// 웹사이트 URL
+  website       String?   @db.VarChar(255)
+  /// 위치/거주지
+  location      String?   @db.VarChar(100)
+  /// 생년월일
+  birthDate     DateTime?
+  /// 인증 계정 여부
+  isVerified    Boolean   @default(false)
+  /// 비공개 계정 여부
+  isPrivate     Boolean   @default(false)
+  /// 활성 계정 여부
+  isActive      Boolean   @default(true)
+  /// 마지막 활동 시간
+  lastActiveAt  DateTime?
+  /// 계정 생성 시간
+  createdAt     DateTime  @default(now())
+  /// 계정 정보 수정 시간
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  /// 작성한 게시물 목록
+  posts         Post[]
+  /// 작성한 댓글 목록
+  comments      Comment[]
+  /// 한 반응 목록
+  reactions     Reaction[]
+  /// 공유한 게시물 목록
+  shares        Share[]
+  
+  // Following relationships
+  /// 팔로우하는 사용자 목록
+  following     Follow[]  @relation("UserFollowing")
+  /// 팔로워 목록
+  followers     Follow[]  @relation("UserFollowers")
+  
+  // Blocking relationships
+  /// 차단한 사용자 목록
+  blocking      Block[]   @relation("UserBlocking")
+  /// 나를 차단한 사용자 목록
+  blockedBy     Block[]   @relation("UserBlocked")
+  
+  // Notifications
+  /// 보낸 알림 목록
+  sentNotifications     Notification[] @relation("NotificationSender")
+  /// 받은 알림 목록
+  receivedNotifications Notification[] @relation("NotificationReceiver")
+  
+  // Messages
+  /// 보낸 메시지 목록
+  sentMessages     Message[] @relation("MessageSender")
+  /// 받은 메시지 목록
+  receivedMessages Message[] @relation("MessageReceiver")
+  
+  // Chat participants
+  /// 참여 중인 채팅방 목록
+  chatParticipants ChatParticipant[]
+
+  // Refresh tokens
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+  @@index([username])
+  @@index([email])
+  @@index([createdAt])
+}
+
+model Post {
+  /// 게시물 고유 식별자
+  id           String         @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 게시물 내용
+  content      String?        @db.Text
+  /// 게시물 유형 (텍스트/이미지/비디오/링크/투표)
+  type         PostType       @default(TEXT)
+  /// 공개 범위 (전체공개/친구만/비공개)
+  visibility   PostVisibility @default(PUBLIC)
+  /// 작성자 ID
+  authorId     String
+  /// 공유 링크 URL
+  linkUrl      String?        @db.VarChar(500)
+  /// 링크 제목
+  linkTitle    String?        @db.VarChar(255)
+  /// 링크 설명
+  linkDescription String?     @db.VarChar(500)
+  /// 해시태그 목록
+  tags         Json?
+  /// 멘션된 사용자 ID 목록
+  mentionedUsers Json?
+  /// 편집 여부
+  isEdited     Boolean        @default(false)
+  /// 편집 시간
+  editedAt     DateTime?
+  /// 고정 게시물 여부
+  isPinned     Boolean        @default(false)
+  /// 예약 발행 시간
+  scheduledAt  DateTime?
+  /// 실제 발행 시간
+  publishedAt  DateTime?
+  /// 생성 시간
+  createdAt    DateTime       @default(now())
+  /// 수정 시간
+  updatedAt    DateTime       @updatedAt
+
+  // Relations
+  /// 작성자 관계
+  author       User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  /// 첨부된 미디어 파일 목록
+  mediaFiles   MediaFile[]
+  /// 댓글 목록
+  comments     Comment[]
+  /// 반응 목록
+  reactions    Reaction[]
+  /// 공유된 게시물 목록
+  shares       Share[]        @relation("SharedPost")
+  /// 원본 게시물 (공유 시)
+  originalPost Post?          @relation("PostShares", fields: [originalPostId], references: [id])
+  /// 이 게시물을 공유한 게시물 목록
+  sharedPosts  Post[]         @relation("PostShares")
+  /// 원본 게시물 ID (공유 시)
+  originalPostId String?
+  
+  @@map("posts")
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([type])
+  @@index([visibility])
+}
+
+model MediaFile {
+  /// 미디어 파일 고유 식별자
+  id          String    @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 저장된 파일명
+  filename    String    @db.VarChar(255)
+  /// 원본 파일명
+  originalName String   @db.VarChar(255)
+  /// 파일 접근 URL
+  url         String    @db.VarChar(500)
+  /// 미디어 유형 (이미지/비디오/오디오/문서)
+  type        MediaType
+  /// 파일 크기 (바이트)
+  size        Int
+  /// 이미지/비디오 가로 크기
+  width       Int?
+  /// 이미지/비디오 세로 크기
+  height      Int?
+  /// 비디오/오디오 재생 시간 (초)
+  duration    Int?
+  /// 썸네일 이미지 URL
+  thumbnailUrl String?  @db.VarChar(500)
+  /// 대체 텍스트 (접근성)
+  altText     String?   @db.VarChar(255)
+  /// 연결된 게시물 ID
+  postId      String?
+  /// 연결된 메시지 ID
+  messageId   String?
+  /// 업로드 시간
+  uploadedAt  DateTime  @default(now())
+
+  // Relations
+  /// 연결된 게시물
+  post        Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  /// 연결된 메시지
+  message     Message?  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("media_files")
+  @@index([postId])
+  @@index([messageId])
+  @@index([type])
+}
+
+model Comment {
+  /// 댓글 고유 식별자
+  id        String   @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 댓글 내용
+  content   String   @db.Text
+  /// 댓글 작성자 ID
+  authorId  String
+  /// 게시물 ID
+  postId    String
+  /// 상위 댓글 ID (대댓글용)
+  parentId  String?
+  /// 편집 여부
+  isEdited  Boolean  @default(false)
+  /// 편집 시간
+  editedAt  DateTime?
+  /// 작성 시간
+  createdAt DateTime @default(now())
+  /// 수정 시간
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  /// 댓글 작성자
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  /// 댓글이 달린 게시물
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  /// 상위 댓글
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  /// 대댓글 목록
+  replies   Comment[] @relation("CommentReplies")
+  /// 댓글에 대한 반응 목록
+  reactions Reaction[]
+
+  @@map("comments")
+  @@index([postId])
+  @@index([authorId])
+  @@index([parentId])
+  @@index([createdAt])
+}
+
+model Reaction {
+  /// 반응 고유 식별자
+  id        String      @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 반응 유형 (좋아요/사랑/웃음/화남/슬픔/놀라움)
+  type      ReactionType @default(LIKE)
+  /// 반응한 사용자 ID
+  userId    String
+  /// 게시물 ID (게시물에 대한 반응)
+  postId    String?
+  /// 댓글 ID (댓글에 대한 반응)
+  commentId String?
+  /// 반응 시간
+  createdAt DateTime    @default(now())
+
+  // Relations
+  /// 반응한 사용자
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 반응 대상 게시물
+  post      Post?       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  /// 반응 대상 댓글
+  comment   Comment?    @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId], name: "unique_user_post_reaction")
+  @@unique([userId, commentId], name: "unique_user_comment_reaction")
+  @@map("reactions")
+  @@index([postId])
+  @@index([commentId])
+}
+
+model Follow {
+  /// 팔로우 관계 고유 식별자
+  id          String       @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 팔로우 하는 사용자 ID
+  followerId  String
+  /// 팔로우 받는 사용자 ID
+  followingId String
+  /// 팔로우 시작 시간
+  createdAt   DateTime     @default(now())
+
+  // Relations
+  /// 팔로우 하는 사용자
+  follower    User         @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  /// 팔로우 받는 사용자
+  following   User         @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model Block {
+  /// 차단 관계 고유 식별자
+  id          String      @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 차단한 사용자 ID
+  blockerId   String
+  /// 차단된 사용자 ID
+  blockedId   String
+  /// 차단 시간
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  /// 차단한 사용자
+  blocker     User        @relation("UserBlocking", fields: [blockerId], references: [id], onDelete: Cascade)
+  /// 차단된 사용자
+  blocked     User        @relation("UserBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@map("blocks")
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+model Share {
+  /// 공유 고유 식별자
+  id         String    @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 공유한 사용자 ID
+  userId     String
+  /// 공유된 게시물 ID
+  postId     String
+  /// 공유 시간
+  createdAt  DateTime  @default(now())
+
+  // Relations
+  /// 공유한 사용자
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 공유된 게시물
+  post      Post     @relation("SharedPost", fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("shares")
+  @@index([userId])
+  @@index([postId])
+}
+
+model Notification {
+  /// 알림 고유 식별자
+  id          String       @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 알림 제목
+  title       String       @db.VarChar(255)
+  /// 알림 메시지 내용
+  message     String       @db.VarChar(1000)
+  /// 수신자 ID
+  receiverId  String
+  /// 발신자 ID
+  senderId    String?
+  /// 알림 유형
+  type        NotificationType
+  /// 읽음 여부
+  isRead      Boolean      @default(false)
+  /// 생성 시간
+  createdAt   DateTime     @default(now())
+
+  // Relations
+  /// 수신자
+  receiver    User         @relation("NotificationReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  /// 발신자
+  sender      User?        @relation("NotificationSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+  @@index([receiverId])
+  @@index([senderId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+model Message {
+  /// 메시지 고유 식별자
+  id          String       @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 메시지 내용
+  content     String       @db.Text
+  /// 발신자 ID
+  senderId    String
+  /// 수신자 ID
+  receiverId  String
+  /// 전송 시간
+  sentAt      DateTime     @default(now())
+  /// 읽음 시간
+  readAt      DateTime?
+  /// 수정 시간
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  /// 발신자
+  sender      User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  /// 수신자
+  receiver    User         @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  /// 첨부된 미디어 파일 목록
+  mediaFiles  MediaFile[]
+
+  @@map("messages")
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([sentAt])
+}
+
+model ChatRoom {
+  /// 채팅방 고유 식별자
+  id          String             @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 채팅방 이름
+  name        String?            @db.VarChar(100)
+  /// 공개 여부
+  isPrivate   Boolean            @default(true)
+  /// 생성 시간
+  createdAt   DateTime           @default(now())
+  /// 수정 시간
+  updatedAt   DateTime           @updatedAt
+
+  // Relations
+  /// 참여자 목록
+  participants ChatParticipant[]
+
+  @@map("chat_rooms")
+  @@index([createdAt])
+}
+
+model ChatParticipant {
+  /// 채팅 참여 고유 식별자
+  id          String       @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 사용자 ID
+  userId      String
+  /// 채팅방 ID
+  chatRoomId  String
+  /// 참여 시간
+  joinedAt    DateTime     @default(now())
+
+  // Relations
+  /// 사용자
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 채팅방
+  chatRoom    ChatRoom     @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chatRoomId])
+  @@map("chat_participants")
+  @@index([userId])
+  @@index([chatRoomId])
+}
+
+model RefreshToken {
+  /// 토큰 고유 식별자
+  id          String       @id @default(dbgenerated("UUID()")) @db.Char(36)
+  /// 토큰 해시값
+  token       String       @unique @db.VarChar(255)
+  /// 사용자 ID
+  userId      String
+  /// 만료 시간
+  expiresAt   DateTime
+  /// 생성 시간
+  createdAt   DateTime     @default(now())
+  /// 사용 여부 (revoked)
+  isRevoked   Boolean      @default(false)
+
+  // Relations
+  /// 사용자
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
